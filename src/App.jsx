@@ -55,7 +55,7 @@ const App = () => {
       );
       const data = await response.json();
       if (data?.results?.[0]) {
-        setListeners(data.results[0].n_listeners || 12354);
+        setListeners(data.results[0].n_listeners || 0);
       }
     } catch (e) {
       console.error("API Error");
@@ -173,10 +173,10 @@ const App = () => {
             Fonoteka Radio
           </h1>
           <p className="text-[#F5F5F5] text-sm md:text-base lg:text-[22px] max-w-[600px] mb-8 lg:mb-12 font-light leading-relaxed opacity-90">
-            O‘zbek musiqa merosi va zamonaviy taronalarni birlashtirgan ilk
-            milliy radio-strimming platformasi. Milliy san’atimiz xazinasi har
-            doim yoningizda – qayerda bo‘lmang, qalbingizga yaqin ohanglardan
-            bahramand bo‘ling!
+            O‘zbek musiqa merosi va zamonaviy taronalarni birlashtirgan <br />{" "}
+            ilk milliy radio-strimming platformasi. Milliy san’atimiz xazinasi{" "}
+            <br /> har doim yoningizda – qayerda bo‘lmang, qalbingizga <br />{" "}
+            yaqin ohanglardan bahramand bo‘ling! Bizda qoling!
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 lg:gap-6 mb-10 lg:mb-16 w-full sm:w-auto">
@@ -205,7 +205,7 @@ const App = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 w-full lg:max-w-[500px] pt-8 ">
+          {/* <div className="grid grid-cols-3 w-full lg:max-w-[500px] pt-8 ">
             <div className=" flex flex-col items-center">
               <div className="text-xl lg:text-4xl font-black">24/7</div>
               <div className="text-gray-500 text-[9px] lg:text-[14px] font-bold uppercase mt-1">
@@ -224,7 +224,7 @@ const App = () => {
                 Muxlis
               </div>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="lg:col-span-5 flex flex-col items-center justify-center w-full relative">
