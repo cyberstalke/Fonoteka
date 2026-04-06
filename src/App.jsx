@@ -197,7 +197,7 @@ const App = () => {
                 className={`w-2 h-2 bg-[#FF3D00] rounded-full ${isPlaying ? "animate-pulse" : ""}`}
               />
               <span className="font-bold text-sm lg:text-lg uppercase tracking-tight">
-                <span className="text-[#ED143B]">Jonli efir</span>
+                <span className="text-[#ED143B]">Jonli Eshitayotganlar</span>
                 <span className="text-white ml-2 lg:ml-3 font-medium">
                   {Number(listeners).toLocaleString("fr-FR").replace(",", " ")}
                 </span>
