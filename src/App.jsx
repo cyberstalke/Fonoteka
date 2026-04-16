@@ -51,14 +51,19 @@ const App = () => {
   const fetchListeners = async () => {
     try {
       const response = await fetch(
-        "https://demoaccount.s02.radio-tochka.com:8080/api/v2/history/?limit=1&offset=0&server=1",
+        "https://stream.fonoteka.fm:1030/api/v2/channels/?limit=1&offset=0&server=1",
       );
-      const data = await response.json();
-      if (data?.results?.[0]) {
-        setListeners(data.results[0].n_listeners || 0);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
       }
+
+      const data = await response.json();
+
+      setListeners(Number(data?.results?.[0]?.listeners_current) || 0);
     } catch (e) {
-      console.error("API Error");
+      console.error("API Error:", e);
+      setListeners(0);
     }
   };
 
