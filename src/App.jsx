@@ -39,7 +39,7 @@ const App = () => {
   // Responsive wave count
   const [barsCount, setBarsCount] = useState(window.innerWidth < 768 ? 30 : 65);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [listeners, setListeners] = useState(12354);
+  const [listeners, setListeners] = useState(0);
 
   // Resize handler for waves
   useEffect(() => {
