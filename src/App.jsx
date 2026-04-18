@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { Play, Pause } from "lucide-react";
-import Hls from "hls.js";
 
 const SocialIcon = ({ type }) => {
   const paths = {
@@ -10,6 +9,7 @@ const SocialIcon = ({ type }) => {
     telegram:
       "M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.703-.332 4.96c.483 0 .698-.221.969-.481l2.33-2.264 4.846 3.58c.894.493 1.538.24 1.76-.826l3.177-14.97c.325-1.305-.5-1.902-1.353-1.518z",
   };
+
   if (type === "google") {
     return (
       <svg width="16" height="20" viewBox="0 0 24 24" fill="none">
@@ -20,6 +20,7 @@ const SocialIcon = ({ type }) => {
       </svg>
     );
   }
+
   return (
     <svg
       viewBox="0 0 24 24"
@@ -31,38 +32,44 @@ const SocialIcon = ({ type }) => {
   );
 };
 
+const STREAM_URL = "https://stream.fonoteka.fm:1040/stream";
+const LISTENERS_API =
+  "https://stream.fonoteka.fm:1030/api/v2/channels/?limit=1&offset=0&server=1";
+
 const App = () => {
   const audioRef = useRef(null);
   const analyserRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const sourceRef = useRef(null);
   const animationFrameRef = useRef(null);
 
-  // Responsive wave count
-  const [barsCount, setBarsCount] = useState(window.innerWidth < 768 ? 30 : 65);
+  const [barsCount, setBarsCount] = useState(
+    typeof window !== "undefined" && window.innerWidth < 768 ? 30 : 65,
+  );
   const [isPlaying, setIsPlaying] = useState(false);
   const [listeners, setListeners] = useState(0);
 
-  // Resize handler for waves
   useEffect(() => {
-    const handleResize = () => setBarsCount(window.innerWidth < 768 ? 30 : 65);
+    const handleResize = () => {
+      setBarsCount(window.innerWidth < 768 ? 30 : 65);
+    };
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const fetchListeners = async () => {
     try {
-      const response = await fetch(
-        "https://stream.fonoteka.fm:1030/api/v2/channels/?limit=1&offset=0&server=1",
-      );
+      const response = await fetch(LISTENERS_API);
 
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`);
       }
 
       const data = await response.json();
-
       setListeners(Number(data?.results?.[0]?.listeners_current) || 0);
-    } catch (e) {
-      console.error("API Error:", e);
+    } catch (error) {
+      console.error("API Error:", error);
       setListeners(0);
     }
   };
@@ -73,38 +80,72 @@ const App = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const setupAnalyzer = () => {
-    if (analyserRef.current) return;
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.src = STREAM_URL;
+    }
+  }, []);
+
+  const setupAnalyzer = async () => {
+    if (!audioRef.current) return;
+
     try {
-      const audioContext = new (
-        window.AudioContext || window.webkitAudioContext
-      )();
-      const analyser = audioContext.createAnalyser();
-      const source = audioContext.createMediaElementSource(audioRef.current);
-      source.connect(analyser);
-      analyser.connect(audioContext.destination);
-      analyser.fftSize = 256;
-      analyserRef.current = analyser;
-    } catch (e) {
-      console.log("AudioContext blocked");
+      if (!audioContextRef.current) {
+        const AudioContextClass =
+          window.AudioContext || window.webkitAudioContext;
+        audioContextRef.current = new AudioContextClass();
+      }
+
+      if (!sourceRef.current) {
+        sourceRef.current = audioContextRef.current.createMediaElementSource(
+          audioRef.current,
+        );
+      }
+
+      if (!analyserRef.current) {
+        const analyser = audioContextRef.current.createAnalyser();
+        analyser.fftSize = 256;
+
+        sourceRef.current.connect(analyser);
+        analyser.connect(audioContextRef.current.destination);
+
+        analyserRef.current = analyser;
+      }
+
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+    } catch (error) {
+      console.error("Analyzer setup error:", error);
     }
   };
 
   const animateWaves = () => {
-    if (!isPlaying || !analyserRef.current) return;
+    if (!analyserRef.current || !isPlaying) return;
+
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
+
     const bars = document.querySelectorAll(".wave-bar");
+
     bars.forEach((bar, i) => {
       const index = Math.floor((i / barsCount) * dataArray.length);
       const value = dataArray[index] / 255;
-      gsap.to(bar, { scaleY: 0.5 + value * 3, duration: 0.1, ease: "none" });
+
+      gsap.to(bar, {
+        scaleY: 0.5 + value * 3,
+        duration: 0.1,
+        ease: "none",
+        overwrite: "auto",
+      });
     });
+
     animationFrameRef.current = requestAnimationFrame(animateWaves);
   };
 
   useEffect(() => {
     let idleTween;
+
     if (!isPlaying) {
       idleTween = gsap.to(".wave-bar", {
         scaleY: "random(0.7, 1.2)",
@@ -118,43 +159,81 @@ const App = () => {
       gsap.killTweensOf(".wave-bar");
       animateWaves();
     }
+
     return () => {
       if (idleTween) idleTween.kill();
-      cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, [isPlaying, barsCount]);
 
-  useEffect(() => {
-    const streamUrl = "https://stream.fonoteka.fm:1030/hls/stream_1_mp3.m3u8";
-    if (Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(streamUrl);
-      hls.attachMedia(audioRef.current);
-    } else if (audioRef.current.canPlayType("application/vnd.apple.mpegurl")) {
-      audioRef.current.src = streamUrl;
-    }
-  }, []);
-
-  const togglePlay = (e) => {
+  const togglePlay = async (e) => {
     e.preventDefault();
-    setupAnalyzer();
-    if (isPlaying) {
-      audioRef.current.pause();
+
+    if (!audioRef.current) return;
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+        return;
+      }
+
+      await setupAnalyzer();
+      await audioRef.current.play();
+      setIsPlaying(true);
+    } catch (error) {
+      console.error("Play error:", error);
       setIsPlaying(false);
-    } else {
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(console.error);
     }
   };
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handlePause = () => setIsPlaying(false);
+    const handlePlay = () => setIsPlaying(true);
+    const handleEnded = () => setIsPlaying(false);
+
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+
+      if (audioContextRef.current?.state !== "closed") {
+        audioContextRef.current?.close().catch(() => {});
+      }
+    };
+  }, []);
+
   return (
     <div className="bg-[#0A0A0D] text-white selection:bg-[#FF3D00] min-h-screen flex flex-col font-sans overflow-x-hidden">
-      <audio ref={audioRef} crossOrigin="anonymous" playsInline />
+      <audio
+        ref={audioRef}
+        crossOrigin="anonymous"
+        playsInline
+        preload="none"
+      />
 
-      {/* Background Waves - Fixed position to avoid layout shifts */}
-      <div className="fixed inset-0 z-0 flex items-center justify-between w-full h-full pointer-events-none px-2  opacity-30">
+      <div className="fixed inset-0 z-0 flex items-center justify-between w-full h-full pointer-events-none px-2 opacity-30">
         {[...Array(barsCount)].map((_, i) => (
           <div
             key={i}
@@ -171,16 +250,19 @@ const App = () => {
         </button>
       </nav>
 
-      {/* Main content with flex-grow to push footer down */}
       <main className="relative z-10 flex-grow flex flex-col lg:grid pt-20 lg:pt-0 lg:grid-cols-12 items-center px-6 lg:px-20 gap-10 lg:gap-0 pb-10">
-        <div className="lg:col-span-7 flex flex-col  lg:items-start  text-left">
-          <h1 className="text-[40px] md:text-[60px] lg:text-[90px] font-black leading-[1.1] mb-6 ">
+        <div className="lg:col-span-7 flex flex-col lg:items-start text-left">
+          <h1 className="text-[40px] md:text-[60px] lg:text-[90px] font-black leading-[1.1] mb-6">
             Fonoteka Radio
           </h1>
+
           <p className="text-[#F5F5F5] text-sm md:text-base lg:text-[22px] max-w-[600px] mb-8 lg:mb-12 font-light leading-relaxed opacity-90">
-            O‘zbek musiqa merosi va zamonaviy taronalarni birlashtirgan <br />{" "}
-            ilk milliy radio-strimming platformasi. Milliy san’atimiz xazinasi{" "}
-            <br /> har doim yoningizda – qayerda bo‘lmang, qalbingizga <br />{" "}
+            O‘zbek musiqa merosi va zamonaviy taronalarni birlashtirgan{" "}
+            <br className=" hidden lg:block" />
+            ilk milliy radio-strimming platformasi. Milliy san’atimiz xazinasi
+            <br className=" hidden lg:block" />
+            har doim yoningizda – qayerda bo‘lmang, qalbingizga{" "}
+            <br className=" hidden lg:block" />
             yaqin ohanglardan bahramand bo‘ling! Bizda qoling!
           </p>
 
@@ -209,27 +291,6 @@ const App = () => {
               </span>
             </div>
           </div>
-
-          {/* <div className="grid grid-cols-3 w-full lg:max-w-[500px] pt-8 ">
-            <div className=" flex flex-col items-center">
-              <div className="text-xl lg:text-4xl font-black">24/7</div>
-              <div className="text-gray-500 text-[9px] lg:text-[14px] font-bold uppercase mt-1">
-                Efir
-              </div>
-            </div>
-            <div className=" flex flex-col items-center">
-              <div className="text-xl lg:text-4xl font-black">+ 500K</div>
-              <div className="text-gray-500 text-[9px] lg:text-[14px] font-bold uppercase mt-1">
-                Musiqa
-              </div>
-            </div>
-            <div className=" flex flex-col items-center">
-              <div className="text-xl lg:text-4xl font-black">+ 500K</div>
-              <div className="text-gray-500 text-[9px] lg:text-[14px] font-bold uppercase mt-1">
-                Muxlis
-              </div>
-            </div>
-          </div> */}
         </div>
 
         <div className="lg:col-span-5 flex flex-col items-center justify-center w-full relative">
@@ -246,10 +307,11 @@ const App = () => {
         </div>
       </main>
 
-      <footer className="relative z-20 px-6 lg:px-20 py-8 flex flex-col lg:flex-row justify-between items-center  gap-6 mt-auto">
+      <footer className="relative z-20 px-6 lg:px-20 py-8 flex flex-col lg:flex-row justify-between items-center gap-6 mt-auto">
         <div className="text-white/20 text-[10px] lg:text-xs order-3 lg:order-1">
           © Fonoteka 2026
         </div>
+
         <div className="flex gap-4 order-1 lg:order-2">
           {["instagram", "google", "telegram"].map((type) => (
             <div
@@ -260,7 +322,8 @@ const App = () => {
             </div>
           ))}
         </div>
-        <div className="text-white/20 text-[10px] lg:text-xs   order-2 lg:order-3">
+
+        <div className="text-white/20 text-[10px] lg:text-xs order-2 lg:order-3">
           Milliy musiqa platformasi
         </div>
       </footer>
